@@ -2,7 +2,7 @@ name: swipelab_webp
 description: >-
   High-performance WebP image encoding for Dart using native libwebp via FFI.
   Supports both lossy and lossless compression with configurable quality.
-version: 1.0.0
+version: 1.1.0
 repository: https://github.com/swipelab/swipelab_webp
 issue_tracker: https://github.com/swipelab/swipelab_webp/issues
 

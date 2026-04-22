@@ -29,6 +29,15 @@ typedef _EncodeRgbaLosslessNative = WebPEncodeResult Function(
   Int32 stride,
 );
 
+typedef _EncodeRgbaOrientedNative = WebPEncodeResult Function(
+  Pointer<Uint8> rgba,
+  Int32 width,
+  Int32 height,
+  Int32 stride,
+  Float quality,
+  Int32 orientation,
+);
+
 typedef _FreeNative = Void Function(Pointer<Uint8> data);
 
 typedef _VersionNative = Int32 Function();
@@ -50,11 +59,34 @@ external WebPEncodeResult _encodeRgbaLossless(
   int stride,
 );
 
+@Native<_EncodeRgbaOrientedNative>(symbol: 'swipelab_webp_encode_rgba_oriented', assetId: 'package:swipelab_webp/swipelab_webp.dart')
+external WebPEncodeResult _encodeRgbaOriented(
+  Pointer<Uint8> rgba,
+  int width,
+  int height,
+  int stride,
+  double quality,
+  int orientation,
+);
+
 @Native<_FreeNative>(symbol: 'swipelab_webp_free', assetId: 'package:swipelab_webp/swipelab_webp.dart')
 external void _free(Pointer<Uint8> data);
 
 @Native<_VersionNative>(symbol: 'swipelab_webp_version', assetId: 'package:swipelab_webp/swipelab_webp.dart')
 external int _version();
+
+/// Pixel-orientation transform applied before encoding. Enum `index` is
+/// the int passed to native; `normal` is the identity (fast path).
+enum WebPOrientation {
+  normal,
+  flipH,
+  rotate180,
+  flipV,
+  transpose,
+  rotate90,
+  transverse,
+  rotate270,
+}
 
 /// Input data for WebP encoding (can be passed to compute)
 class WebPEncodeInput {
@@ -64,6 +96,7 @@ class WebPEncodeInput {
     required this.height,
     this.quality = 80.0,
     this.lossless = false,
+    this.orientation = WebPOrientation.normal,
   });
 
   final Uint8List rgba;
@@ -71,6 +104,7 @@ class WebPEncodeInput {
   final int height;
   final double quality;
   final bool lossless;
+  final WebPOrientation orientation;
 }
 
 /// Top-level function for use with compute()
@@ -80,6 +114,15 @@ Uint8List? encodeWebP(WebPEncodeInput input) {
       rgba: input.rgba,
       width: input.width,
       height: input.height,
+    );
+  }
+  if (input.orientation != WebPOrientation.normal) {
+    return WebPEncoder.encodeRgbaOriented(
+      rgba: input.rgba,
+      width: input.width,
+      height: input.height,
+      quality: input.quality,
+      orientation: input.orientation,
     );
   }
   return WebPEncoder.encodeRgba(
@@ -147,6 +190,44 @@ class WebPEncoder {
 
     try {
       final result = _encodeRgbaLossless(inputPtr, width, height, stride);
+
+      if (result.error != 0 || result.data == nullptr) {
+        return null;
+      }
+
+      final output = Uint8List.fromList(
+        result.data.asTypedList(result.size),
+      );
+
+      _free(result.data);
+      return output;
+    } finally {
+      malloc.free(inputPtr);
+    }
+  }
+
+  /// Encode RGBA to WebP (lossy) with a pixel-orientation transform baked in.
+  /// Returns encoded WebP data as Uint8List, or null on error.
+  static Uint8List? encodeRgbaOriented({
+    required Uint8List rgba,
+    required int width,
+    required int height,
+    required WebPOrientation orientation,
+    double quality = 80.0,
+  }) {
+    final stride = width * 4;
+    final inputPtr = malloc<Uint8>(rgba.length);
+    inputPtr.asTypedList(rgba.length).setAll(0, rgba);
+
+    try {
+      final result = _encodeRgbaOriented(
+        inputPtr,
+        width,
+        height,
+        stride,
+        quality,
+        orientation.index,
+      );
 
       if (result.error != 0 || result.data == nullptr) {
         return null;
