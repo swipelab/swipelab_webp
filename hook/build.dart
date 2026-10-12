@@ -68,9 +68,7 @@ void main(List<String> args) async {
     final libwebpPath = await _ensureLibwebp(logger);
 
     // Collect all libwebp source files
-    final webpSources = <String>[
-      // Our wrapper
-      'src/swipelab_webp.c',
+    final libwebpSources = <String>[
       // sharpyuv
       ...Directory('$libwebpPath/sharpyuv')
           .listSync()
@@ -97,10 +95,20 @@ void main(List<String> args) async {
           .map((f) => f.path),
     ];
 
+    // On Windows the compiler runs through cmd.exe, which caps a command at
+    // 8191 characters, so the libwebp sources reach it in a response file.
+    final responseFile = File.fromUri(
+      input.outputDirectory.resolve('libwebp_sources.rsp'),
+    );
+    await responseFile.parent.create(recursive: true);
+    await responseFile.writeAsString(
+      libwebpSources.map((source) => '"$source"').join('\n'),
+    );
+
     final builder = CBuilder.library(
       name: packageName,
       assetName: 'swipelab_webp.dart',
-      sources: webpSources,
+      sources: ['src/swipelab_webp.c'],
       includes: [
         libwebpPath,
         '$libwebpPath/src',
@@ -108,6 +116,7 @@ void main(List<String> args) async {
       flags: [
         '-DWEBP_USE_THREAD=1',
         '-DWEBP_NEAR_LOSSLESS=1',
+        '@${responseFile.path}',
       ],
       // Link against libm for math functions (not needed on Windows)
       libraries: Platform.isWindows ? [] : ['m'],
